@@ -87,31 +87,31 @@ self.addEventListener('fetch', event => {
 
   // Forward /idk?idk={url} to your backend
   if (path === "/idk") {
-    const target = url.searchParams.get("idk")
-    if (!target) return new Response("Missing 'idk' parameter", { status: 400 })
+  const target = url.searchParams.get("idk");
+  if (!target) return new Response("Missing 'idk' parameter", { status: 400 });
 
-    try {
-      const resp = await fetch(`https://idk.asdsdsdwads-jazz899.workers.dev/?url=${encodeURIComponent(target)}`, {
-        method: request.method,
-        headers: request.headers,
-        body: request.method !== "GET" && request.method !== "HEAD" ? await request.clone().arrayBuffer() : null,
-        redirect: "follow"
-      })
+  try {
+    const resp = await fetch(target, {
+      method: request.method,
+      headers: request.headers,
+      body: request.method !== "GET" && request.method !== "HEAD" ? await request.clone().arrayBuffer() : null,
+      redirect: "follow"
+    });
 
-      const resHeaders = new Headers(resp.headers)
-      resHeaders.set("Access-Control-Allow-Origin", "*")
-      resHeaders.set("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS")
-      resHeaders.set("Access-Control-Allow-Headers", "*")
+    const resHeaders = new Headers(resp.headers);
+    resHeaders.set("Access-Control-Allow-Origin", "*");
+    resHeaders.set("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
+    resHeaders.set("Access-Control-Allow-Headers", "*");
 
-      return new Response(resp.body, {
-        status: resp.status,
-        statusText: resp.statusText,
-        headers: resHeaders
-      })
-    } catch (err) {
-      return new Response("Error forwarding request: " + err.message, { status: 500 })
-    }
+    return new Response(resp.body, {
+      status: resp.status,
+      statusText: resp.statusText,
+      headers: resHeaders
+    });
+  } catch (err) {
+    return new Response("Error forwarding request: " + err.message, { status: 500 });
   }
+}
 
   // Fallback for anything else
   return new Response("Not found", { status: 404 })
