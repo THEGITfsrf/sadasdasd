@@ -61,21 +61,30 @@ self.addEventListener('fetch', event => {
   event.respondWith((async () => {
     const req = event.request;
     const resp = await fetch(req);
-    
+
     // Only process HTML pages
     const contentType = resp.headers.get('content-type') || '';
     if (contentType.includes('text/html')) {
-      const text = await resp.text();
-      const urls = [...text.matchAll(/href=["']([^"']+)["']/gi)].map(m => m[1]);
+      let text = await resp.text();
       const baseUrl = new URL(req.url);
 
-      // Forward each link to your backend via /idk?idk=
-      for (let u of urls) {
-        let fullUrl = u.startsWith('http') ? u : new URL(u, baseUrl).href;
-        fetch('/idk?idk=' + encodeURIComponent(fullUrl)).catch(() => {});
-      }
+      // Rewrite all relative href/src URLs to go through /idk?idk=
+      text = text.replace(/(href|src)=["']([^"']+)["']/gi, (match, attr, urlPart) => {
+        // Skip empty or javascript: links
+        if (!urlPart || urlPart.startsWith('javascript:') || urlPart.startsWith('#')) return match;
 
-      return new Response(text, resp);
+        // Make absolute if relative
+        let fullUrl = urlPart.startsWith('http') ? urlPart : new URL(urlPart, baseUrl).href;
+
+        // Encode and point through /idk
+        return `${attr}="/idk?idk=${encodeURIComponent(fullUrl)}"`;
+      });
+
+      return new Response(text, {
+        status: resp.status,
+        statusText: resp.statusText,
+        headers: resp.headers
+      });
     }
 
     return resp;
