@@ -1,0 +1,3 @@
+name = "Forwadingr"
+compatibility_date = "2025-11-18"
+main = "index.js" # or "src/index.js" if you put your code in src/
