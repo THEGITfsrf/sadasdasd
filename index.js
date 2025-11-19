@@ -3,32 +3,92 @@ addEventListener("fetch", event => {
 })
 
 async function handleRequest(request) {
-  try {
-    // Parse URL from query, or you can hardcode the target API
-    const url = new URL(request.url)
-    const targetAPI = url.searchParams.get("url") // e.g. ?url=https://example.com/api/data
+  const url = new URL(request.url)
+  const path = url.pathname
 
-    if (!targetAPI) {
-      return new Response("Missing 'url' parameter", { status: 400 })
-    }
+  // Serve index.html at /
+  if (path === "/") {
+    return new Response(`<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><title>Mini Browser</title></head>
+<body>
+<h2>Mini Browser Tab</h2>
+<input type="text" id="urlInput" placeholder="Enter URL here (with https://)">
+<button id="loadBtn">Load URL</button>
+<iframe id="browserFrame" style="width:100%;height:300px;"></iframe>
+<script>
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js').then(() => console.log('SW registered'))
+}
 
-    // Fetch the target API
-    const apiResponse = await fetch(targetAPI, {
-      method: request.method,           // Forward GET/POST etc
-      headers: request.headers,         // Forward headers (optional: filter sensitive ones)
-      body: request.body ? request.body : null,
-      redirect: "follow"
+const frame = document.getElementById('browserFrame');
+document.getElementById('loadBtn').addEventListener('click', () => {
+  let url = document.getElementById('urlInput').value.trim();
+  if (!url.startsWith('http')) url = 'https://' + url;
+  frame.src = url;
+});
+</script>
+</body>
+</html>`, {
+      headers: { "Content-Type": "text/html" }
     })
-
-    // Clone response to modify headers
-    const res = new Response(apiResponse.body, apiResponse)
-    // Allow your frontend to read it (bypass CORS)
-    res.headers.set("Access-Control-Allow-Origin", "*")
-    res.headers.set("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS")
-    res.headers.set("Access-Control-Allow-Headers", "*")
-
-    return res
-  } catch (err) {
-    return new Response("Error: " + err.message, { status: 500 })
   }
+
+  // Serve sw.js at /sw.js
+  if (path === "/sw.js") {
+    return new Response(`
+self.addEventListener('install', e => self.skipWaiting());
+self.addEventListener('activate', e => clients.claim());
+
+self.addEventListener('fetch', event => {
+  event.respondWith((async () => {
+    const req = event.request;
+    const resp = await fetch(req);
+    const contentType = resp.headers.get('content-type') || '';
+    if (contentType.includes('text/html')) {
+      const text = await resp.text();
+      const urls = [...text.matchAll(/href=["']([^"']+)["']/gi)].map(m => m[1]);
+      const client = await clients.get(event.clientId);
+      const baseUrl = new URL(req.url);
+      for (let u of urls) {
+        let fullUrl = u.startsWith('http') ? u : new URL(u, baseUrl).href;
+        fetch('/idk?idk=' + encodeURIComponent(fullUrl)).catch(() => {});
+      }
+    }
+    return resp;
+  })());
+});
+`, { headers: { "Content-Type": "application/javascript" } })
+  }
+
+  // Forward /idk?idk={url} to your backend
+  if (path === "/idk") {
+    const target = url.searchParams.get("idk")
+    if (!target) return new Response("Missing 'idk' parameter", { status: 400 })
+
+    try {
+      const resp = await fetch(`https://idk.asdsdsdwads-jazz899.workers.dev/?url=${encodeURIComponent(target)}`, {
+        method: request.method,
+        headers: request.headers,
+        body: request.method !== "GET" && request.method !== "HEAD" ? await request.clone().arrayBuffer() : null,
+        redirect: "follow"
+      })
+
+      const resHeaders = new Headers(resp.headers)
+      resHeaders.set("Access-Control-Allow-Origin", "*")
+      resHeaders.set("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS")
+      resHeaders.set("Access-Control-Allow-Headers", "*")
+
+      return new Response(resp.body, {
+        status: resp.status,
+        statusText: resp.statusText,
+        headers: resHeaders
+      })
+    } catch (err) {
+      return new Response("Error forwarding request: " + err.message, { status: 500 })
+    }
+  }
+
+  // Fallback for anything else
+  return new Response("Not found", { status: 404 })
 }
