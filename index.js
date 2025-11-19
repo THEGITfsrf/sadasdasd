@@ -60,36 +60,36 @@ self.addEventListener('activate', e => clients.claim());
 self.addEventListener('fetch', event => {
   event.respondWith((async () => {
     const req = event.request;
-    const resp = await fetch(req);
+    const url = new URL(req.url);
 
-    // Only process HTML pages
-    const contentType = resp.headers.get('content-type') || '';
-    if (contentType.includes('text/html')) {
-      let text = await resp.text();
-      const baseUrl = new URL(req.url);
-
-      // Rewrite all relative href/src URLs to go through /idk?idk=
-      text = text.replace(/(href|src)=["']([^"']+)["']/gi, function(match, attr, urlPart) {
-        // Skip empty or javascript: links
-        if (!urlPart || urlPart.startsWith('javascript:') || urlPart.startsWith('#')) return match;
-
-        // Make absolute if relative
-        let fullUrl = urlPart.startsWith('http') ? urlPart : new URL(urlPart, baseUrl).href;
-
-        // Use string concatenation instead of template literal
-        return attr + '="/idk?idk=' + encodeURIComponent(fullUrl) + '"';
-      });
-
-      return new Response(text, {
-        status: resp.status,
-        statusText: resp.statusText,
-        headers: resp.headers
-      });
+    // Allow Worker’s own paths to go through unmodified
+    if (url.pathname === '/' || url.pathname === '/sw.js' || url.pathname.startsWith('/idk')) {
+      return fetch(req);
     }
 
-    return resp;
+    // Check if the request has a "Referer" pointing to a proxied page
+    const referer = req.headers.get('Referer');
+    let baseForRelative = referer || url.origin;
+
+    // Treat all other requests as needing proxy
+    let proxiedUrl;
+    try {
+      // Construct full URL relative to the page that initiated the request
+      const resolved = new URL(req.url, baseForRelative);
+      proxiedUrl = '/idk?idk=' + encodeURIComponent(resolved.href);
+    } catch {
+      proxiedUrl = '/idk?idk=' + encodeURIComponent(req.url);
+    }
+
+    return fetch(proxiedUrl, {
+      method: req.method,
+      headers: req.headers,
+      body: req.method !== "GET" && req.method !== "HEAD" ? await req.clone().arrayBuffer() : null,
+      redirect: "follow"
+    });
   })());
 });
+
 
 `, { headers: { "Content-Type": "application/javascript" } })
   }
