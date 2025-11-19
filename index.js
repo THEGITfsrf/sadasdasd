@@ -69,15 +69,15 @@ self.addEventListener('fetch', event => {
       const baseUrl = new URL(req.url);
 
       // Rewrite all relative href/src URLs to go through /idk?idk=
-      text = text.replace(/(href|src)=["']([^"']+)["']/gi, (match, attr, urlPart) => {
+      text = text.replace(/(href|src)=["']([^"']+)["']/gi, function(match, attr, urlPart) {
         // Skip empty or javascript: links
         if (!urlPart || urlPart.startsWith('javascript:') || urlPart.startsWith('#')) return match;
 
         // Make absolute if relative
         let fullUrl = urlPart.startsWith('http') ? urlPart : new URL(urlPart, baseUrl).href;
 
-        // Encode and point through /idk
-        return `${attr}="/idk?idk=${encodeURIComponent(fullUrl)}"`;
+        // Use string concatenation instead of template literal
+        return attr + '="/idk?idk=' + encodeURIComponent(fullUrl) + '"';
       });
 
       return new Response(text, {
